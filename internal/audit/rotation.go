@@ -3,72 +3,67 @@ package audit
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"time"
 )
 
-// RotationConfig holds settings for log rotation.
+// RotationConfig holds configuration for log rotation.
 type RotationConfig struct {
 	MaxSizeBytes int64
-	MaxAgeDays   int
-	BackupDir    string
+	MaxBackups   int
 }
 
 // DefaultRotationConfig returns sensible defaults.
 func DefaultRotationConfig() RotationConfig {
 	return RotationConfig{
 		MaxSizeBytes: 10 * 1024 * 1024, // 10 MB
-		MaxAgeDays:   30,
-		BackupDir:    "",
+		MaxBackups:   3,
 	}
 }
 
-// Rotator manages audit log rotation.
+// Rotator manages log file rotation.
 type Rotator struct {
-	cfg     RotationConfig
-	logPath string
+	path   string
+	cfg    RotationConfig
 }
 
-// NewRotator creates a Rotator for the given log file path.
-func NewRotator(logPath string, cfg RotationConfig) *Rotator {
-	return &Rotator{cfg: cfg, logPath: logPath}
+// NewRotator creates a new Rotator for the given log path.
+func NewRotator(path string, cfg RotationConfig) *Rotator {
+	return &Rotator{path: path, cfg: cfg}
 }
 
-// ShouldRotate reports whether the log file needs rotation.
-func (r *Rotator) ShouldRotate() (bool, error) {
-	info, err := os.Stat(r.logPath)
+// ShouldRotate reports whether the log file exceeds the max size.
+func (r *Rotator) ShouldRotate() bool {
+	info, err := os.Stat(r.path)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return false, nil
-		}
-		return false, fmt.Errorf("stat log file: %w", err)
+		return false
 	}
-	if info.Size() >= r.cfg.MaxSizeBytes {
-		return true, nil
-	}
-	if r.cfg.MaxAgeDays > 0 {
-		cutoff := time.Now().AddDate(0, 0, -r.cfg.MaxAgeDays)
-		if info.ModTime().Before(cutoff) {
-			return true, nil
-		}
-	}
-	return false, nil
+	return info.Size() >= r.cfg.MaxSizeBytes
 }
 
-// Rotate renames the current log file to a timestamped backup.
+// Rotate renames the current log file to a timestamped backup and removes
+// old backups beyond MaxBackups.
 func (r *Rotator) Rotate() error {
-	backupDir := r.cfg.BackupDir
-	if backupDir == "" {
-		backupDir = filepath.Dir(r.logPath)
+	timestamp := time.Now().UTC().Format("20060102T150405Z")
+	backup := fmt.Sprintf("%s.%s", r.path, timestamp)
+	if err := os.Rename(r.path, backup); err != nil {
+		return fmt.Errorf("audit rotate: rename: %w", err)
 	}
-	if err := os.MkdirAll(backupDir, 0o700); err != nil {
-		return fmt.Errorf("create backup dir: %w", err)
+	return r.pruneBackups()
+}
+
+func (r *Rotator) pruneBackups() error {
+	pattern := r.path + ".*"
+	matches, err := filepath.Glob(pattern)
+	if err != nil {
+		return fmt.Errorf("audit rotate: glob: %w", err)
 	}
-	ts := time.Now().UTC().Format("20060102T150405Z")
-	base := filepath.Base(r.logPath)
-	dest := filepath.Join(backupDir, fmt.Sprintf("%s.%s", base, ts))
-	if err := os.Rename(r.logPath, dest); err != nil {
-		return fmt.Errorf("rotate log: %w", err)
+	// sort ascending; oldest first
+	sort.Strings(matches)
+	for len(matches) > r.cfg.MaxBackups {
+		if err := os.Remove(matches[0]); err != nil {
+			return fmt.Errorf("audit rotate: remove old backup: %w", err)
+		}
+		matches = matches[1:]
 	}
 	return nil
 }
