@@ -1,13 +1,7 @@
-// Package audit provides structured, append-only audit logging for
-// vaultpull sync operations.
+// Package audit provides structured audit logging and log rotation
+// for vaultpull operations.
 //
-// Each sync attempt — successful or not — is recorded as a JSON line
-// containing the secret path, number of keys written, whether the run
-// was a dry-run, and an optional error message.
-//
-// Usage:
-//
-//	f, _ := os.OpenFile("vaultpull.audit.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
-//	l := audit.NewLogger(f)
-//	l.Log(audit.Entry{Operation: "sync", SecretPath: path, KeysWritten: n})
+// Use NewLogger to record secret sync events with timestamps and optional
+// error context. Use NewRotator with a RotationConfig to manage log file
+// size and age, automatically archiving old logs to a backup directory.
 package audit
