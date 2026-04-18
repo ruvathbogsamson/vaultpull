@@ -1,51 +1,62 @@
+// Package sync orchestrates fetching secrets from Vault and writing them
+// to a local .env file via the env package.
 package sync
 
 import (
+	"context"
 	"fmt"
 
-	"github.com/example/vaultpull/internal/config"
-	"github.com/example/vaultpull/internal/env"
-	"github.com/example/vaultpull/internal/vault"
+	"github.com/your-org/vaultpull/internal/audit"
+	"github.com/your-org/vaultpull/internal/env"
+	"github.com/your-org/vaultpull/internal/vault"
 )
 
-// Syncer orchestrates pulling secrets from Vault and writing them to a .env file.
+// Syncer coordinates a single vault-to-env sync operation.
 type Syncer struct {
-	cfg    *config.Config
-	client *vault.Client
-	writer *env.Writer
+	client  *vault.Client
+	writer  *env.Writer
+	auditor *audit.Logger
 }
 
-// New creates a new Syncer from the provided config.
-func New(cfg *config.Config) (*Syncer, error) {
-	client, err := vault.New(cfg.VaultAddr, cfg.VaultToken)
-	if err != nil {
-		return nil, fmt.Errorf("syncer: failed to create vault client: %w", err)
-	}
-
-	writer, err := env.NewWriter(cfg.OutputFile)
-	if err != nil {
-		return nil, fmt.Errorf("syncer: failed to create env writer: %w", err)
-	}
-
-	return &Syncer{
-		cfg:    cfg,
-		client: client,
-		writer: writer,
-	}, nil
+// New returns a Syncer ready to run.
+func New(client *vault.Client, writer *env.Writer, auditor *audit.Logger) *Syncer {
+	return &Syncer{client: client, writer: writer, auditor: auditor}
 }
 
-// Run fetches secrets from Vault, applies namespace filtering, and writes the result.
-func (s *Syncer) Run() (int, error) {
-	secrets, err := s.client.GetSecrets(s.cfg.SecretPath)
+// Run fetches secrets at secretPath, optionally filters by namespace,
+// writes them to the configured output file, and emits an audit entry.
+func (s *Syncer) Run(ctx context.Context, secretPath, namespace string, dryRun bool) error {
+	secrets, err := s.client.GetSecrets(ctx, secretPath)
 	if err != nil {
-		return 0, fmt.Errorf("syncer: failed to fetch secrets: %w", err)
+		if s.auditor != nil {
+			_ = s.auditor.Log(audit.Entry{
+				Operation:  "sync",
+				SecretPath: secretPath,
+				Namespace:  namespace,
+				DryRun:     dryRun,
+				Error:      err.Error(),
+			})
+		}
+		return fmt.Errorf("fetching secrets: %w", err)
 	}
 
-	filtered := env.Filter(secrets, s.cfg.Namespace)
+	filtered := env.Filter(secrets, namespace)
 
-	if err := s.writer.Write(filtered); err != nil {
-		return 0, fmt.Errorf("syncer: failed to write env file: %w", err)
+	if !dryRun {
+		if err := s.writer.Write(filtered); err != nil {
+			return fmt.Errorf("writing env file: %w", err)
+		}
 	}
 
-	return len(filtered), nil
+	if s.auditor != nil {
+		_ = s.auditor.Log(audit.Entry{
+			Operation:   "sync",
+			SecretPath:  secretPath,
+			Namespace:   namespace,
+			KeysWritten: len(filtered),
+			DryRun:      dryRun,
+		})
+	}
+
+	return nil
 }
