@@ -1,7 +1,16 @@
-// Package audit provides structured audit logging and log rotation
-// for vaultpull operations.
+// Package audit provides structured audit logging for vaultpull operations.
 //
-// Use NewLogger to record secret sync events with timestamps and optional
-// error context. Use NewRotator with a RotationConfig to manage log file
-// size and age, automatically archiving old logs to a backup directory.
+// It supports newline-delimited JSON entries via Shipper, automatic log
+// rotation via Rotator, and low-level append logging via Logger.
+//
+// Typical usage:
+//
+//	shipper, err := audit.NewShipper("/var/log/vaultpull/audit.log", audit.DefaultRotationConfig())
+//	if err != nil { ... }
+//	shipper.Ship(audit.Entry{
+//		Operation: "sync",
+//		Path:      "secret/data/myapp",
+//		Namespace: "MYAPP",
+//		Keys:      []string{"MYAPP_DB"},
+//	})
 package audit
