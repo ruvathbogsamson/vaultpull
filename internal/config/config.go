@@ -40,7 +40,7 @@ func Load(cfgFile string) (*Config, error) {
 	if cfgFile != "" {
 		v.SetConfigFile(cfgFile)
 		if err := v.ReadInConfig(); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("reading config file %q: %w", cfgFile, err)
 		}
 	}
 
