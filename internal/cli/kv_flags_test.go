@@ -64,3 +64,13 @@ func TestParseKVFlags_InvalidFlag(t *testing.T) {
 		t.Fatal("expected error for unknown flag")
 	}
 }
+
+func TestParseKVFlags_KVVersion1(t *testing.T) {
+	f, err := ParseKVFlags([]string{"-path", "myapp/config", "-kv-version", "1"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if f.KVVersion != 1 {
+		t.Errorf("KVVersion: got %d, want 1", f.KVVersion)
+	}
+}
