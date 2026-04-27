@@ -1,6 +1,7 @@
 package vault
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -50,7 +51,7 @@ func (c *InitClient) Initialize(req InitRequest) (*InitResponse, error) {
 	}
 
 	url := fmt.Sprintf("%s/v1/sys/init", c.address)
-	httpReq, err := http.NewRequest(http.MethodPost, url, bytesReader(body))
+	httpReq, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("build init request: %w", err)
 	}
@@ -71,4 +72,22 @@ func (c *InitClient) Initialize(req InitRequest) (*InitResponse, error) {
 		return nil, fmt.Errorf("decode init response: %w", err)
 	}
 	return &result, nil
+}
+
+// IsInitialized checks whether the Vault cluster has already been initialized.
+func (c *InitClient) IsInitialized() (bool, error) {
+	url := fmt.Sprintf("%s/v1/sys/init", c.address)
+	resp, err := c.httpClient.Get(url)
+	if err != nil {
+		return false, fmt.Errorf("check init status: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var result struct {
+		Initialized bool `json:"initialized"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return false, fmt.Errorf("decode init status response: %w", err)
+	}
+	return result.Initialized, nil
 }
