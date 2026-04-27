@@ -9,7 +9,7 @@ import (
 
 // NamespaceClient provides operations scoped to a Vault namespace.
 type NamespaceClient struct {
-	client *api.Client
+	client    *api.Client
 	namespace string
 }
 
@@ -66,4 +66,27 @@ func (n *NamespaceClient) ListNamespaces() ([]string, error) {
 		}
 	}
 	return result, nil
+}
+
+// ChildClient returns a new NamespaceClient scoped to a child namespace
+// relative to the current namespace (e.g. if the current namespace is "team"
+// and child is "project", the new client targets "team/project").
+func (n *NamespaceClient) ChildClient(child string) (*NamespaceClient, error) {
+	if child == "" {
+		return nil, fmt.Errorf("child namespace is required")
+	}
+	child = strings.Trim(child, "/")
+	childNS := n.namespace + "/" + child
+
+	cfg := api.DefaultConfig()
+	cfg.Address = n.client.Address()
+
+	c, err := api.NewClient(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("creating child namespace client: %w", err)
+	}
+	c.SetToken(n.client.Token())
+	c.SetNamespace(childNS)
+
+	return &NamespaceClient{client: c, namespace: childNS}, nil
 }
