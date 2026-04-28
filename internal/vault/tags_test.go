@@ -48,6 +48,23 @@ func TestTagFilter_Match_Empty(t *testing.T) {
 	}
 }
 
+func TestTagFilter_Match_MultipleRequired(t *testing.T) {
+	f, _ := NewTagFilter([]string{"env=prod", "region=us-east"})
+
+	// All required tags present and matching
+	if !f.Match(map[string]string{"env": "prod", "region": "us-east"}) {
+		t.Error("expected match when all required tags are present")
+	}
+	// Only one of the required tags matches
+	if f.Match(map[string]string{"env": "prod", "region": "eu-west"}) {
+		t.Error("expected no match when only one required tag matches")
+	}
+	// Neither required tag is present
+	if f.Match(map[string]string{"team": "backend"}) {
+		t.Error("expected no match when no required tags are present")
+	}
+}
+
 func TestFilterSecrets_WithTags(t *testing.T) {
 	secrets := map[string]string{
 		"DB_PASS": "secret1",
