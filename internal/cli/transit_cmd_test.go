@@ -67,3 +67,15 @@ func TestParseTransitFlags_InvalidFlag(t *testing.T) {
 		t.Fatal("expected error for unknown flag")
 	}
 }
+
+func TestParseTransitFlags_ValidActions(t *testing.T) {
+	validActions := []string{"encrypt", "decrypt"}
+	for _, action := range validActions {
+		t.Run(action, func(t *testing.T) {
+			_, err := ParseTransitFlags([]string{"-key", "k", "-payload", "p", "-action", action})
+			if err != nil {
+				t.Errorf("expected no error for valid action %q, got: %v", action, err)
+			}
+		})
+	}
+}
