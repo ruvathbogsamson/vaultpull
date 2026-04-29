@@ -58,3 +58,19 @@ func (c *AgentClient) FetchConfig() (*AgentConfig, error) {
 	}
 	return &wrapper.Data, nil
 }
+
+// IsHealthy checks whether the Vault Agent is reachable and responding at its
+// health endpoint (/v1/agent/health). Returns nil if the agent is healthy.
+func (c *AgentClient) IsHealthy() error {
+	url := c.address + "/v1/agent/health"
+	resp, err := c.hc.Get(url) //nolint:noctx
+	if err != nil {
+		return fmt.Errorf("agent health check failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("agent health check returned status %d", resp.StatusCode)
+	}
+	return nil
+}
